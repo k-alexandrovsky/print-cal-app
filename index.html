@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Print Prep</title>
+<meta name="description" content="Color-corrects photos for a calibrated Canon SELPHY CP1500 before printing.">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Print Prep">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --line: rgba(0, 0, 0, 0.1);
+    --accent: #0071e3;
+    --accent-text: #ffffff;
+    --seg-bg: rgba(118, 118, 128, 0.12);
+    --seg-on: #ffffff;
+    --warn-bg: #fff4d6;
+    --warn-text: #6b4b00;
+    --error-bg: #c62828;
+    --bar-bg: rgba(245, 245, 247, 0.85);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --surface: #1c1c1e;
+      --text: #f5f5f7;
+      --muted: #98989d;
+      --line: rgba(255, 255, 255, 0.12);
+      --accent: #0a84ff;
+      --seg-bg: rgba(118, 118, 128, 0.24);
+      --seg-on: #636366;
+      --warn-bg: #3a2e0a;
+      --warn-text: #ffd770;
+      --bar-bg: rgba(0, 0, 0, 0.8);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: calc(20px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+  }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 0; color: var(--muted); }
+  .cal { margin: 2px 0 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .cal:empty { display: none; }
+  .demo {
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--warn-bg);
+    color: var(--warn-text);
+    font-size: 15px;
+  }
+  .pick {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    margin: 20px 0 0;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 17px;
+    cursor: pointer;
+  }
+  .pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .pick:has(input:disabled) { opacity: 0.4; cursor: default; }
+  .pick:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .controls { margin: 20px 0 0; }
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 2px;
+    border-radius: 10px;
+    background: var(--seg-bg);
+  }
+  .seg button {
+    min-height: 36px;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); font-weight: 600; }
+  .hint { margin: 8px 2px 0; color: var(--muted); font-size: 13px; }
+  .strength {
+    display: grid;
+    grid-template-columns: auto 1fr 3.2em;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 2px 0;
+    font-size: 15px;
+  }
+  .strength input { width: 100%; accent-color: var(--accent); }
+  .strength output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .photos { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 16px; }
+  .card { background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+  .card canvas { display: block; width: 100%; height: auto; min-height: 120px; background: var(--seg-bg); }
+  .meta { display: flex; align-items: center; gap: 8px; padding: 10px 6px 10px 14px; font-size: 14px; }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .remove {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .help { margin: 24px 2px 0; color: var(--muted); font-size: 15px; }
+  .help summary { cursor: pointer; color: var(--text); font-weight: 500; }
+  .help ol { padding-left: 20px; margin: 8px 0 0; }
+  .help li + li { margin-top: 6px; }
+  .bar {
+    position: sticky;
+    bottom: 0;
+    padding: 12px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: var(--bar-bg);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid var(--line);
+  }
+  .bar button {
+    display: block;
+    width: 100%;
+    max-width: 608px;
+    min-height: 52px;
+    margin: 0 auto;
+    border: 0;
+    border-radius: 14px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .bar button:disabled { opacity: 0.4; cursor: default; }
+  .error {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top));
+    left: 16px;
+    right: 16px;
+    max-width: 608px;
+    margin: 0 auto;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--error-bg);
+    color: #fff;
+    font-size: 15px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    z-index: 10;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Print Prep</h1>
+    <p class="sub">Color correction for your SELPHY CP1500</p>
+    <p class="cal" id="calibration"></p>
+  </header>
+
+  <p class="demo" id="demo" hidden>
+    <strong>Demo calibration.</strong> This correction comes from a simulated printer, not yours.
+    Don't print with it: run <code>analyze.py</code> on your chart photo and publish the new
+    <code>correction.json</code>.
+  </p>
+
+  <label class="pick">
+    <input id="pick" type="file" accept="image/*" multiple>
+    <span id="pick-label">Choose photos</span>
+  </label>
+
+  <section class="controls" id="controls" hidden>
+    <div class="seg" role="group" aria-label="Preview">
+      <button type="button" data-view="screen" aria-pressed="true">On screen</button>
+      <button type="button" data-view="as-is" aria-pressed="false">Print as-is</button>
+      <button type="button" data-view="corrected" aria-pressed="false">Print corrected</button>
+    </div>
+    <p class="hint">Print previews are simulated from your printer's measurements.</p>
+    <label class="strength">
+      Correction
+      <input id="strength" type="range" min="0" max="100" step="5" value="100">
+      <output id="strength-out">100%</output>
+    </label>
+  </section>
+
+  <ul class="photos" id="photos"></ul>
+
+  <details class="help">
+    <summary>How to print</summary>
+    <ol>
+      <li>Choose photos, then tap <strong>Save / Share</strong> and save them to Photos (or pick your printing app in the share sheet).</li>
+      <li>Print the saved <em>_selphy</em> copies exactly like the calibration chart: same app, same paper, auto-correction and filters off.</li>
+      <li>Got a new paper pack or changed settings? Re-calibrate.</li>
+    </ol>
+  </details>
+</div>
+
+<div class="bar"><button id="share" type="button" disabled>Save / Share</button></div>
+<div class="error" id="error" role="alert" hidden></div>
+
+<template id="card">
+  <li class="card">
+    <canvas></canvas>
+    <div class="meta">
+      <span class="name"></span>
+      <span class="status"></span>
+      <button class="remove" type="button" aria-label="Remove photo">×</button>
+    </div>
+  </li>
+</template>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
