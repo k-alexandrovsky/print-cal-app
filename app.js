@@ -215,8 +215,8 @@ function showError(err) {
 function showCalibration(meta) {
   const parts = [];
   if (meta.created) parts.push(`Calibrated ${meta.created.slice(0, 10)}`);
-  if (meta.dE_before != null) {
-    parts.push(`color error ${meta.dE_before.toFixed(1)} → ${meta.dE_after.toFixed(1)} ΔE`);
+  if (meta.typical_dE_before != null) {
+    parts.push(`typical colors ${meta.typical_dE_before.toFixed(1)} → ${meta.typical_dE_after.toFixed(1)} ΔE (predicted)`);
   }
   $("#calibration").textContent = parts.join(" · ");
   $("#demo").hidden = !meta.demo;
