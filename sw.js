@@ -1,6 +1,6 @@
 // Network first (always the latest calibration when online), cache as offline fallback.
-const CACHE = "print-prep-v1";
-const FILES = ["./", "index.html", "app.js", "core.js", "worker.js", "correction.json",
+const CACHE = "print-cal-v2";
+const FILES = ["./", "index.html", "app.js", "core.js", "worker.js", "profiles/index.json",
   "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {

@@ -5,9 +5,10 @@ let corr;
 self.onmessage = (e) => {
   const { id, correction, pixels, options } = e.data;
   if (correction) {
-    corr = decodeCorrection(correction);
+    corr = decodeCorrection(correction); // a new printer profile was selected
     return;
   }
+  if (!pixels) return self.postMessage({ id }); // ping
   const out = render(corr, new Uint8ClampedArray(pixels), options);
   self.postMessage({ id, pixels: out.buffer }, [out.buffer]);
 };

@@ -1,7 +1,7 @@
 {
-  "name": "Print Prep",
-  "short_name": "Print Prep",
-  "description": "Color-corrects photos for a calibrated Canon SELPHY CP1500.",
+  "name": "Print Calibration",
+  "short_name": "Print Cal",
+  "description": "Color-corrects photos for a calibrated printer, so prints match the screen.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

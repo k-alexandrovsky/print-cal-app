@@ -6,8 +6,8 @@ const PREVIEW_DIM = 1200;
 const $ = (sel) => document.querySelector(sel);
 const P3 = supportsP3();
 const SPACE = P3 ? "display-p3" : "srgb";
-const state = { corr: null, photos: [], view: "screen", strength: 1 };
-window.__printPrep = state; // used by tests
+const state = { profiles: [], profile: null, corr: null, photos: [], view: "screen", strength: 1 };
+window.__printCal = state; // used by tests
 
 function supportsP3() {
   try {
@@ -18,20 +18,37 @@ function supportsP3() {
   }
 }
 
+// localStorage can be unavailable (private mode, blocked storage): settings then last for the visit only
+const store = {
+  get(key) {
+    try {
+      return localStorage.getItem(`printcal.${key}`);
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(`printcal.${key}`, value);
+    } catch {
+      // ignore
+    }
+  },
+};
+
 // --- processing in a worker (falls back to the main thread) ------------------
 
 let worker = null;
 let nextId = 0;
 const pending = new Map();
 
-async function startWorker(correction) {
+async function startWorker() {
   try {
     const w = new Worker("worker.js", { type: "module" });
-    w.postMessage({ correction });
     const ok = await new Promise((resolve) => {
       w.onmessage = () => resolve(true);
       w.onerror = () => resolve(false);
-      w.postMessage({ id: -1, pixels: new ArrayBuffer(4), options: {} });
+      w.postMessage({ id: -1 }); // ping
       setTimeout(() => resolve(false), 5000);
     });
     if (!ok) return w.terminate();
@@ -133,11 +150,10 @@ let queue = Promise.resolve();
 const schedule = (job) => (queue = queue.then(job).catch(showError));
 
 function addPhoto(file) {
-  const stem = file.name.replace(/\.[^.]+$/, "") || "photo";
   const card = $("#card").content.firstElementChild.cloneNode(true);
   const photo = {
     file, card, gen: 0, preview: null, views: {}, blob: null,
-    outName: `${stem}_selphy.jpg`,
+    stem: file.name.replace(/\.[^.]+$/, "") || "photo",
     canvas: card.querySelector("canvas"),
     status: card.querySelector(".status"),
   };
@@ -181,15 +197,53 @@ async function renderPhoto(photo) {
 async function showView(photo) {
   const p = photo.preview;
   if (!p) return;
-  const { view, strength } = state;
+  const { view, strength, corr } = state;
   if (view === "screen") return paint(photo.canvas, p.screen, p.w, p.h, SPACE);
   const key = view === "as-is" ? view : `${view}@${strength}`;
   photo.views[key] ??= await process(p.p3.slice(), { view, strength });
-  if (state.view === view && state.strength === strength) paint(photo.canvas, photo.views[key], p.w, p.h, "srgb");
+  if (state.view === view && state.strength === strength && state.corr === corr) {
+    paint(photo.canvas, photo.views[key], p.w, p.h, "srgb");
+  }
+}
+
+// Correction or strength changed: redo previews and print files.
+function rerenderAll() {
+  for (const p of state.photos) {
+    p.gen++;
+    p.blob = null;
+    p.views = {};
+    schedule(() => showView(p));
+    schedule(() => renderPhoto(p));
+  }
+  update();
 }
 
 function setStatus(photo, text) {
   photo.status.textContent = text;
+}
+
+// --- profiles ------------------------------------------------------------------
+
+async function selectProfile(id) {
+  const profile = state.profiles.find((p) => p.id === id) ?? state.profiles[0];
+  const res = await fetch(`profiles/${profile.id}.json`, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`Can't load the calibration for ${profile.name}`);
+  const correction = await res.json();
+  state.profile = profile;
+  state.corr = decodeCorrection(correction);
+  worker?.postMessage({ correction });
+  store.set("profile", profile.id);
+  $("#printer").value = profile.id;
+  const saved = store.get(`strength.${profile.id}`);
+  setStrength(saved === null ? 100 : Number(saved));
+  showCalibration(state.corr.meta);
+  rerenderAll();
+}
+
+function setStrength(percent) {
+  $("#strength").value = percent;
+  $("#strength-out").textContent = `${percent}%`;
+  state.strength = percent / 100;
 }
 
 // --- UI ------------------------------------------------------------------------
@@ -223,7 +277,9 @@ function showCalibration(meta) {
 }
 
 async function share() {
-  const files = state.photos.map((p) => new File([p.blob], p.outName, { type: "image/jpeg" }));
+  const files = state.photos.map(
+    (p) => new File([p.blob], `${p.stem}_${state.profile.id}.jpg`, { type: "image/jpeg" }),
+  );
   if (navigator.canShare?.({ files })) {
     try {
       await navigator.share({ files });
@@ -260,34 +316,36 @@ function bindControls() {
     clearTimeout(timer);
     timer = setTimeout(() => {
       state.strength = Number(e.target.value) / 100;
-      for (const p of state.photos) {
-        p.gen++;
-        p.blob = null;
-        p.views = {};
-        schedule(() => showView(p));
-        schedule(() => renderPhoto(p));
-      }
-      update();
+      store.set(`strength.${state.profile.id}`, e.target.value);
+      rerenderAll();
     }, 300);
   });
+  $("#printer").addEventListener("change", (e) => selectProfile(e.target.value).catch(showError));
   $("#share").onclick = share;
 }
 
 async function init() {
   bindControls();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-  let correction;
   try {
-    const res = await fetch("correction.json", { cache: "no-cache" });
+    const res = await fetch("profiles/index.json", { cache: "no-cache" });
     if (!res.ok) throw new Error(res.statusText);
-    correction = await res.json();
+    state.profiles = (await res.json()).profiles;
+    if (!state.profiles?.length) throw new Error("empty");
   } catch {
     $("#pick").disabled = true;
-    return showError("No calibration found: correction.json is missing next to this page.");
+    return showError("No printer calibrations found (profiles/index.json is missing or empty).");
   }
-  state.corr = decodeCorrection(correction);
-  showCalibration(state.corr.meta);
-  await startWorker(correction);
+  const select = $("#printer");
+  for (const p of state.profiles) select.add(new Option(p.name, p.id));
+  select.disabled = state.profiles.length < 2;
+  await startWorker();
+  try {
+    await selectProfile(store.get("profile"));
+  } catch (e) {
+    $("#pick").disabled = true;
+    return showError(e);
+  }
   document.body.dataset.ready = "1";
 }
 
